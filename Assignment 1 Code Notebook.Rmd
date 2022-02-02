@@ -1,0 +1,163 @@
+---
+title: "Assignment 1 Code"
+author: "Daniel Chadourne"
+output: html_notebook
+---
+## Load Libraries 
+```{r, warning=FALSE}
+library(readr)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(data.table)
+library(ggplot2)
+library(fastmap)
+
+
+```
+
+## Load the data  
+```{r}
+
+data = read.csv("./Data/battle-related-deaths.csv")
+```
+
+## Question 1 
+### Mean
+```{r}
+
+Mean = data %>% group_by(Entity) %>% summarize(Mean = mean(Battle.related.deaths))
+Mean 
+```
+
+
+### Standard Deviation 
+```{r}
+
+SDev = data %>% group_by(Entity) %>% summarize(sdev = sd(Battle.related.deaths))
+SDev
+```
+## Question 3
+
+### Load the population data from 
+#### https://ourworldindata.org/grapher/historical-and-projected-population-by-region
+```{r}
+pop_data = read.csv('./Data/population-by-region.csv')
+```
+
+### Filter the data  
+```{r}
+pop_data_filtered = pop_data %>% filter(Year > 1945)
+pop_data_filtered = pop_data_filtered %>% filter(Year < 2017)
+filtered_twice = pop_data_filtered %>% filter(grepl("(Africa|North America|Asia|Oceania|Europe|South America|Bahrain|Cyprus|Egypt|Iran|Iraq|Israel|Jordan|Kuwait|Lebanon|Oman|Palestine|Qatar|Saudi Arabia|Syrian Arab Republic|Turkey|United Arab Emirates|Yemen)", Entity))
+```
+
+```{r}
+#In this chunk the population data is filtered into new tables by region
+Africa = filtered_twice %>% filter(grepl("(Africa)", Entity)) %>% filter(Code == "")
+
+North_America = filtered_twice %>% filter(grepl("(North America)", Entity))
+
+South_America = filtered_twice %>% filter(grepl("(South America)", Entity))
+
+Asia = filtered_twice %>% filter(grepl("(Asia)", Entity))
+
+Oceania = filtered_twice %>% filter(grepl("(Oceania)", Entity))
+
+Europe = filtered_twice %>% filter(grepl("(Europe)", Entity))
+
+Middle_East = pop_data_filtered %>% filter(grepl("(Bahrain|Cyprus|Egypt|Iran|Iraq|Israel|Jordan|Kuwait|Lebanon|Oman|Palestine|Qatar|Saudi Arabia|Syrian Arab Republic|Turkey|United Arab Emirates|Yemen)", Entity))
+```
+
+```{r}
+#In this chunk we will merge the North America and South America population metrics into one column
+# in order to format the data into similar grouping as the Battle-related-deaths data set
+
+North_pop = North_America %>% filter(grepl('(North America)', Entity)) %>% select(Population..historical.estimates.and.future.projections., Year) %>% rename(North_pop = Population..historical.estimates.and.future.projections.)
+
+South_pop = South_America %>% filter(grepl('(South America)', Entity)) %>% select(Population..historical.estimates.and.future.projections., Year) %>% rename(South_pop = Population..historical.estimates.and.future.projections.)
+
+Americas = merge(North_pop, South_pop, by = "Year")
+Americas = Americas %>% mutate(Americas_population = North_pop + South_pop) %>% select(Americas_population, Year)
+
+```
+
+```{r}
+#In this chunk we will merge the Asia and Oceania population metrics into one column
+# in order to format the data into similar grouping as the Battle-related-deaths data set
+
+Asia_pop = Asia %>% filter(grepl('(Asia)', Entity)) %>% select(Population..historical.estimates.and.future.projections., Year) %>% rename(Asia_pop = Population..historical.estimates.and.future.projections.)
+
+Oceania_pop = Oceania %>% filter(grepl('(Oceania)', Entity)) %>% select(Population..historical.estimates.and.future.projections., Year) %>% rename(Oceania_pop = Population..historical.estimates.and.future.projections.)
+
+Asia_and_Oceania = merge(Asia_pop, Oceania_pop, by = "Year") %>% mutate(Asia_Oceania_population = Asia_pop + Oceania_pop) %>% select(Asia_Oceania_population, Year)
+
+```
+
+```{r}
+#In this chunk we will create tables for the population metrics for both Africa and the Middle East
+# in order to format the data into similar grouping as the Battle-related-deaths data set
+
+Africa = Africa %>% rename(African_population = Population..historical.estimates.and.future.projections.) %>% select(African_population, Year)
+
+Middle_East_total_population = aggregate(Middle_East[4], by=Middle_East['Year'], sum)
+
+Middle_East = Middle_East_total_population %>% rename(Middle_East_population = Population..historical.estimates.and.future.projections.) %>% select(Middle_East_population, Year)
+
+
+```
+
+```{r, message=FALSE}
+#This chunk will join all of our previously created data tables into on which shares the same general format as the Battle-related-deaths data set.
+
+Joined = full_join(Europe, Americas)
+
+Joined = full_join(Joined, Asia_and_Oceania)
+
+Joined = full_join(Joined, Africa)
+
+Joined = full_join(Joined, Middle_East)
+
+Joined = Joined %>% rename(Europe_population = Population..historical.estimates.and.future.projections.) %>% select(Europe_population,Americas_population,Asia_Oceania_population, African_population, Middle_East_population, Year)
+```
+
+```{r}
+#This chunk will take the means previously identifed in question 1, and will create a data table that is similar in size as the "Joined" table.
+
+Mean = Mean %>% mutate(African_mean = Mean[1]) %>% mutate(Americas_mean = Mean[2]) %>% mutate(Asian_Oceanian_mean = Mean[3]) %>% mutate(Europe_mean = Mean[4]) %>% mutate(Middle_East_mean = Mean[5]) %>% select(African_mean, Americas_mean, Asian_Oceanian_mean, Europe_mean, Middle_East_mean)
+
+#This line will add 61 lines to our "Mean" table so that this table and Joined are contain the same number of records.
+Mean = Mean %>% rbind(Mean, Mean[rep(1, 61),])
+```
+
+
+```{r}
+#This chunk will filter the data needed in order to run our correlation tests (population by region)
+Americas_deaths = data %>% filter(Year > 1945) %>% filter(Year< 2017) %>% filter(grepl("(Americas)", Entity))
+
+Africa_deaths = data %>% filter(Year > 1945) %>% filter(Year< 2017) %>% filter(grepl("(Africa)", Entity))
+
+Europe_deaths = data %>% filter(Year > 1945) %>% filter(Year< 2017) %>% filter(grepl("(Europe)", Entity))
+
+Asia_Oceania_deaths = data %>% filter(Year > 1945) %>% filter(Year< 2017) %>% filter(grepl("(Asia)", Entity))
+
+Middle_East_deaths = data %>% filter(Year > 1945) %>% filter(Year< 2017) %>% filter(grepl("(Middle East)", Entity))
+```
+
+```{r}
+#This chunk will run the correlation tests for each region to see if a general pattern appears across the different regional correlations
+cor.test(Africa_deaths$Battle.related.deaths, Joined$African_population)
+
+cor.test( Americas_deaths$Battle.related.deaths, Joined$Americas_population)
+
+cor.test( Europe_deaths$Battle.related.deaths, Joined$Europe_population)
+
+cor.test( Asia_Oceania_deaths$Battle.related.deaths, Joined$Asia_Oceania_population)
+
+cor.test( Middle_East_deaths$Battle.related.deaths, Joined$Middle_East_population)
+```
+
+## Figure 1
+```{r error=FALSE, message=FALSE, warning=FALSE}
+data %>% ggplot(aes(x = Year, y = Battle.related.deaths)) + geom_point() + aes(color = Entity) + stat_smooth(fill = NA) + ylim(0,75999) + labs(title = "Battle Related Deaths Per Year") + ylab('Battle Related Deaths')
+```
